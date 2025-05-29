@@ -8,10 +8,10 @@
         padding: 16px;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 16px;
       }
       button {
-        padding: 10px 16px;
+        padding: 8px 12px;
         font-size: 14px;
         background-color: #18a0fb;
         color: white;
@@ -19,32 +19,176 @@
         border-radius: 4px;
         cursor: pointer;
       }
+      button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+      #status {
+        font-size: 12px;
+        color: #666;
+        margin-top: 8px;
+      }
+      .code-output {
+        display: none;
+      }
     </style>
   </head>
   <body>
-    <button id="analyze">Analyze & Export</button>
-
+    <button id="analyze">Analyze & Export HTML</button>
+    <button id="exportImages">Export Images</button>
+    <div id="status"></div>
+    <div id="output"></div>
+    
     <script>
-      let codeToDownload = '';
-
+      let generatedHTML = '';
+      let currentFrameName = '';
+      
+      function setStatus(message) {
+        document.getElementById('status').textContent = message;
+      }
+      
+      function downloadFile(content, filename, mimeType = 'text/html') {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+      
+      const TINYPNG_API_KEY = '2rhlC9SVLw2SMkx100mcZXVxRkmZbMff';
+      
+      async function compressImageWithTinyPNG(imageBytes) {
+        try {
+          const response = await fetch('https://api.tinify.com/shrink', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Basic ' + btoa('api:' + TINYPNG_API_KEY),
+              'Content-Type': 'application/octet-stream'
+            },
+            body: imageBytes
+          });
+          
+          if (!response.ok) {
+            throw new Error(`TinyPNG API error: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          
+          const compressedResponse = await fetch(result.output.url);
+          if (!compressedResponse.ok) {
+            throw new Error('Failed to download compressed image');
+          }
+          
+          return await compressedResponse.arrayBuffer();
+        } catch (error) {
+          console.error('TinyPNG compression failed:', error);
+          return imageBytes;
+        }
+      }
+      
+      async function downloadImages(frameName, images) {
+        if (generatedHTML) {
+          downloadFile(generatedHTML, `${frameName}.html`);
+        }
+        
+        setStatus(`Compressing ${images.length} images with TinyPNG...`);
+        
+        for (let i = 0; i < images.length; i++) {
+          const image = images[i];
+          setStatus(`Compressing image ${i + 1}/${images.length}...`);
+          
+          try {
+            const uint8Array = new Uint8Array(image.data);
+            const compressedBytes = await compressImageWithTinyPNG(uint8Array);
+            const compressedUint8Array = new Uint8Array(compressedBytes);
+            
+            const blob = new Blob([compressedUint8Array], { type: 'image/png' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = image.name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            const originalSize = image.originalSize || image.data.length;
+            const compressedSize = compressedBytes.byteLength;
+            const savings = Math.round((1 - compressedSize / originalSize) * 100);
+            
+            console.log(`${image.name}: ${originalSize} -> ${compressedSize} bytes (${savings}% savings)`);
+            
+          } catch (error) {
+            console.error(`Failed to compress ${image.name}:`, error);
+            const uint8Array = new Uint8Array(image.data);
+            const blob = new Blob([uint8Array], { type: 'image/png' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = image.name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }
+        }
+        
+        setStatus(`Downloaded ${images.length} images${generatedHTML ? ' and HTML file' : ''}. Check your Downloads folder.`);
+      }
+      
       document.getElementById('analyze').onclick = () => {
+        setStatus('Analyzing components...');
         parent.postMessage({ pluginMessage: { type: 'analyze-components' } }, '*');
       };
-
-      onmessage = (event) => {
-        const { type, code } = event.data.pluginMessage;
+      
+      document.getElementById('exportImages').onclick = () => {
+        const button = document.getElementById('exportImages');
+        if (button.disabled) return;
+        
+        setStatus('Exporting and compressing images...');
+        button.disabled = true;
+        button.textContent = 'Processing...';
+        
+        setTimeout(() => {
+          if (button.disabled) {
+            button.disabled = false;
+            button.textContent = 'Export Images';
+            setStatus('Export timed out. Please try again.');
+          }
+        }, 60000);
+        
+        parent.postMessage({ pluginMessage: { type: 'export-images' } }, '*');
+      };
+      
+      window.onmessage = (event) => {
+        const { type, code, frameName, images, success } = event.data.pluginMessage || {};
+        
         if (type === 'customerio-code') {
-          codeToDownload = code;
-
-          const blob = new Blob([codeToDownload], { type: 'text/html' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'customerio-export.html';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+          generatedHTML = code;
+          currentFrameName = frameName || 'email';
+          
+          downloadFile(generatedHTML, `${currentFrameName}.html`);
+          setStatus('HTML file downloaded successfully!');
+        }
+        
+        if (type === 'download-images') {
+          const button = document.getElementById('exportImages');
+          button.disabled = false;
+          button.textContent = 'Export Images';
+          downloadImages(frameName, images);
+        }
+        
+        if (type === 'export-complete') {
+          const button = document.getElementById('exportImages');
+          button.disabled = false;
+          button.textContent = 'Export Images';
+          if (!success) {
+            setStatus('Export failed. Please check the console for errors.');
+          }
         }
       };
     </script>

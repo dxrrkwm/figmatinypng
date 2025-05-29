@@ -10,6 +10,8 @@ const COMPONENT_TYPES = {
   HERO: 'hero-banner'
 };
 
+const TINYPNG_API_KEY = '2rhlC9SVLw2SMkx100mcZXVxRkmZbMff';
+
 function getComponentType(nodeName) {
   const name = nodeName.toLowerCase();
   if (name.includes('attention')) return COMPONENT_TYPES.ATTENTION;
@@ -88,7 +90,41 @@ function generateCode(node, type) {
   }
 }
 
-figma.ui.onmessage = (msg) => {
+async function findImages(node) {
+  const images = [];
+  const processedHashes = new Set();
+  
+  function walk(n) {
+    if (n.type === 'RECTANGLE' || n.type === 'FRAME' || n.type === 'COMPONENT' || n.type === 'INSTANCE') {
+      const name = n.name.toLowerCase();
+      if (name.includes('hero') || name.includes('image')) {
+        if (n.fills && n.fills.length > 0) {
+          for (const fill of n.fills) {
+            if (fill.type === 'IMAGE' && fill.imageHash && !processedHashes.has(fill.imageHash)) {
+              processedHashes.add(fill.imageHash);
+              images.push({
+                node: n,
+                imageHash: fill.imageHash,
+                name: n.name
+              });
+            }
+          }
+        }
+      }
+    }
+    
+    if ('children' in n && n.children) {
+      for (const child of n.children) {
+        walk(child);
+      }
+    }
+  }
+  
+  walk(node);
+  return images;
+}
+
+figma.ui.onmessage = async (msg) => {
   if (msg.type === 'analyze-components') {
     const currentFrame = figma.currentPage.selection[0];
 
@@ -102,7 +138,6 @@ figma.ui.onmessage = (msg) => {
     for (const node of currentFrame.children) {
       const type = getComponentType(node.name);
 
-      // Skip Hero and Logo components
       if (!type || type === COMPONENT_TYPES.HERO || type === COMPONENT_TYPES.LOGO) continue;
 
       const code = generateCode(node, type);
@@ -119,5 +154,89 @@ figma.ui.onmessage = (msg) => {
     const finalCode = [header, ...bodyComponents, footer].join('\n\n');
 
     figma.ui.postMessage({ type: 'customerio-code', code: finalCode });
+  }
+  
+  if (msg.type === 'export-images') {
+    try {
+      const currentFrame = figma.currentPage.selection[0];
+
+      if (!currentFrame || currentFrame.type !== 'FRAME') {
+        figma.notify('Please select a frame.');
+        figma.ui.postMessage({ type: 'export-complete', success: false });
+        return;
+      }
+
+      figma.notify('Finding images...');
+      const images = await findImages(currentFrame);
+      
+      if (images.length === 0) {
+        figma.notify('No hero banners or images found in the selected frame.');
+        figma.ui.postMessage({ type: 'export-complete', success: false });
+        return;
+      }
+
+      figma.notify(`Found ${images.length} images. Starting compression...`);
+      
+      const processedImages = [];
+      let successCount = 0;
+      
+      for (let i = 0; i < images.length; i++) {
+        const imageData = images[i];
+        try {
+          figma.notify(`Processing image ${i + 1}/${images.length}...`);
+          
+          const image = figma.getImageByHash(imageData.imageHash);
+          if (!image) {
+            console.log(`No image found for hash: ${imageData.imageHash}`);
+            continue;
+          }
+          
+          // without compression 
+          figma.notify(`Exporting image ${i + 1}/${images.length}...`);
+          const bytes = await image.getBytesAsync();
+          if (!bytes || bytes.length === 0) {
+            console.log(`No bytes for image: ${imageData.name}`);
+            continue;
+          }
+          
+          // filename
+          const fileName = `${imageData.name.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}_${i + 1}.png`;
+          
+          processedImages.push({
+            name: fileName,
+            data: new Uint8Array(bytes),
+            originalSize: bytes.length
+          });
+          
+          successCount++;
+          figma.notify(`Successfully processed ${successCount}/${images.length} images`);
+          
+        } catch (error) {
+          console.error(`Failed to process image ${i + 1}:`, error);
+          figma.notify(`Failed to compress image ${i + 1}: ${error.message}`);
+        }
+      }
+      
+      if (processedImages.length > 0) {
+        figma.ui.postMessage({
+          type: 'download-images',
+          frameName: currentFrame.name,
+          images: processedImages.map(img => ({
+            name: img.name,
+            data: Array.from(img.data)
+          }))
+        });
+        
+        figma.notify(`Successfully processed ${processedImages.length} images!`);
+      } else {
+        figma.notify('No images could be processed.');
+        figma.ui.postMessage({ type: 'export-complete', success: false });
+      }
+      
+    } catch (error) {
+      console.error('Export images error:', error);
+      figma.notify('Failed to export images: ' + error.message);
+      figma.ui.postMessage({ type: 'export-complete', success: false });
+    }
   }
 };
