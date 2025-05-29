@@ -1,3 +1,4 @@
+// Modified main plugin code (code.js)
 "use strict";
 figma.showUI(__html__, { width: 400, height: 500 });
 
@@ -127,6 +128,7 @@ function findImageNodes() {
     return imageNodes;
 }
 
+// FIXED: Modified export function to send all images at once
 async function exportImages() {
     const imageNodes = findImageNodes();
     
@@ -175,18 +177,23 @@ async function exportImages() {
                 });
             }
 
-            // Send image data to UI for download
-            figma.ui.postMessage({
-                type: 'download-image',
+            // Store image data instead of sending immediately
+            exportedImages.push({
+                name: node.name,
                 imageData: Array.from(finalImageData),
-                filename: `${node.name.replace(/\s+/g, '_')}_${Date.now()}.${format}`
+                filename: `${node.name.replace(/\s+/g, '_')}_${Date.now() + exportedImages.length}.${format}`
             });
 
-            exportedImages.push(node.name);
         } catch (error) {
             console.error(`Failed to export ${node.name}:`, error);
         }
     }
+
+    // Send all images at once to the UI
+    figma.ui.postMessage({
+        type: 'download-images-batch',
+        images: exportedImages
+    });
 
     return { success: true, count: exportedImages.length };
 }

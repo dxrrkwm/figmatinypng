@@ -224,6 +224,33 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    /* Progress indicator for downloads */
+    .download-progress {
+      background: #e3f2fd;
+      border: 1px solid #2196f3;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      color: #1565c0;
+      margin-bottom: 12px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: #e0e0e0;
+      border-radius: 3px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #2196f3;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
   </style>
 </head>
 <body>
@@ -268,11 +295,72 @@
     const copyBtn = document.getElementById('copyBtn');
     const messages = document.getElementById('messages');
     
+    let pendingDownloads = [];
+    let currentDownloadIndex = 0;
+    
     function showMessage(message, type = 'error') {
       messages.innerHTML = `<div class="${type}-message">${message}</div>`;
       setTimeout(() => {
-        messages.innerHTML = '';
+        if (messages.innerHTML.includes(message)) {
+          messages.innerHTML = '';
+        }
       }, 5000);
+    }
+
+    function showDownloadProgress(current, total) {
+      const percentage = Math.round((current / total) * 100);
+      messages.innerHTML = `
+        <div class="download-progress">
+          Downloading image ${current} of ${total}...
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: ${percentage}%"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function downloadImageWithDelay(imageData, filename, delay = 0) {
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          try {
+            const uint8Array = new Uint8Array(imageData);
+            const blob = new Blob([uint8Array], { type: 'image/png' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            resolve();
+          } catch (error) {
+            console.error('Download failed:', error);
+            resolve();
+          }
+        }, delay);
+      });
+    }
+
+    async function processDownloadQueue() {
+      if (pendingDownloads.length === 0) return;
+
+      for (let i = 0; i < pendingDownloads.length; i++) {
+        const { imageData, filename } = pendingDownloads[i];
+        showDownloadProgress(i + 1, pendingDownloads.length);
+        
+        // Add delay between downloads (especially important for macOS)
+        const delay = i * 1000; // 1 second delay between each download
+        await downloadImageWithDelay(imageData, filename, delay);
+      }
+
+      // Clear the queue and show completion message
+      const totalDownloaded = pendingDownloads.length;
+      pendingDownloads = [];
+      currentDownloadIndex = 0;
+      
+      showMessage(`Successfully downloaded ${totalDownloaded} image(s)! 🎉`, 'success');
     }
     
     generateBtn.addEventListener('click', () => {
@@ -289,6 +377,8 @@
       exportBtn.disabled = true;
       exportBtn.innerHTML = '<span class="loading"></span>Exporting...';
       messages.innerHTML = '';
+      pendingDownloads = [];
+      currentDownloadIndex = 0;
       
       parent.postMessage({ pluginMessage: { type: 'export-images' } }, '*');
     });
@@ -311,8 +401,8 @@
       }
     });
     
-    window.addEventListener('message', (event) => {
-      const { type, code, error, imageCount, imageData, filename } = event.data.pluginMessage;
+    window.addEventListener('message', async (event) => {
+      const { type, code, error, imageCount, images } = event.data.pluginMessage;
       
       if (type === 'code-generated') {
         generateBtn.disabled = false;
@@ -331,18 +421,18 @@
         }
       }
       
+      // Handle batch download of images (NEW)
+      if (type === 'download-images-batch') {
+        if (images && images.length > 0) {
+          pendingDownloads = images;
+          await processDownloadQueue();
+        }
+      }
+      
+      // Keep legacy single image download for backward compatibility
       if (type === 'download-image') {
-        // Handle individual image download
-        const uint8Array = new Uint8Array(imageData);
-        const blob = new Blob([uint8Array], { type: 'image/png' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        const { imageData, filename } = event.data.pluginMessage;
+        await downloadImageWithDelay(imageData, filename);
       }
       
       if (type === 'images-exported') {
@@ -351,13 +441,10 @@
         
         if (error) {
           showMessage(error, 'error');
-        } else {
-          const message = imageCount > 0 
-            ? `Successfully exported ${imageCount} image(s)! 🎉`
-            : 'No images named "Hero Banner" or "Image" found to export.';
-          const messageType = imageCount > 0 ? 'success' : 'info';
-          showMessage(message, messageType);
+        } else if (imageCount === 0) {
+          showMessage('No images named "Hero Banner" or "Image" found to export.', 'info');
         }
+        // Success message is now handled in processDownloadQueue()
       }
     });
   </script>
