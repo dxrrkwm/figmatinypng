@@ -351,7 +351,7 @@
         showDownloadProgress(i + 1, pendingDownloads.length);
         
         // Add delay between downloads (especially important for macOS)
-        const delay = i * 1000; // 1 second delay between each download
+        const delay = i * 5000; // 1 second delay between each download
         await downloadImageWithDelay(imageData, filename, delay);
       }
 
