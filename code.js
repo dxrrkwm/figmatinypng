@@ -1,0 +1,248 @@
+"use strict";
+figma.showUI(__html__, { width: 400, height: 500 });
+
+const componentMappings = {
+    'Text Block': {
+        template: '<x-box :background="Component.utils.background(\'\', \'#ffffff\')" width="auto" margin="24px 0px" padding="24px" border-radius="24px 24px 24px 24px"><x-heading-2 margin="0px 0px 12px">{{HEADLINE}}</x-heading-2><x-paragraph margin="0px">{{BODY_TEXT}}</x-paragraph></x-box>',
+        textFields: ['Headline', 'Body Text']
+    },
+    'Attention Text Block': {
+        template: '<x-box :background="Component.utils.background(\'\', globalStyles.colors.lavender_6blqnmcrl8ky)" width="auto" margin="24px 0px" padding="24px" border-radius="24px 24px 24px 24px"><x-heading-2 margin="0px 0px 12px">{{HEADLINE}}</x-heading-2><x-paragraph margin="0px">{{BODY_TEXT}}</x-paragraph></x-box>',
+        textFields: ['Headline', 'Body Text']
+    },
+    'CTA Text Block': {
+        template: '<x-box :background="Component.utils.background(\'\', globalStyles.colors.mint_o2kodsw131o7)" width="auto" margin="24px 0px" padding="24px" border-radius="24px 24px 24px 24px"><x-heading-2 margin="0px 0px 12px">{{HEADLINE}}</x-heading-2><x-paragraph margin="0px">{{BODY_TEXT}}</x-paragraph></x-box>',
+        textFields: ['Headline', 'Body Text']
+    },
+    'Primary Button': {
+        template: '<x-cta href="https://mate.academy/" margin="24px 0px" :font-size="18">{{LABEL}}</x-cta>',
+        textFields: ['Label']
+    },
+    'Secondary Button': {
+        template: '<x-cta href="https://mate.academy/" margin="32px 0px" background="#2a2f3c">{{LABEL}}</x-cta>',
+        textFields: ['Label']
+    }
+};
+
+const HEADER = `<x-base :background="Component.utils.background('', globalStyles.colors.backgrounddefault_9jv8tl2jff3e)" text-align="left"   dir="auto" font-family="'Manrope', sans-serif">
+  <x-section width="600px" padding="20px 20px 0px" outer-background="">
+<logo-default></logo-default>`;
+
+const FOOTER = `<footer-default></footer-default></x-section>
+</x-base>`;
+
+function extractTextFromNode(node, targetName) {
+    if (node.type === 'TEXT' && node.name === targetName) {
+        return node.characters;
+    }
+    if ('children' in node) {
+        for (const child of node.children) {
+            const result = extractTextFromNode(child, targetName);
+            if (result) return result;
+        }
+    }
+    return '';
+}
+
+function processComponent(node) {
+    const componentName = node.name;
+    const mapping = componentMappings[componentName];
+    if (!mapping) return null;
+
+    let template = mapping.template;
+    // Extract text for each required field
+    for (const fieldName of mapping.textFields) {
+        const text = extractTextFromNode(node, fieldName);
+        const placeholder = `{{${fieldName.toUpperCase().replace(' ', '_')}}}`;
+        template = template.replace(placeholder, text || `Default ${fieldName}`);
+    }
+    return template;
+}
+
+function findComponentsInSelection() {
+    const selection = figma.currentPage.selection;
+    const components = [];
+
+    function traverseNode(node) {
+        // Check if this node is a recognized component
+        const processedComponent = processComponent(node);
+        if (processedComponent) {
+            components.push(processedComponent);
+        }
+        // Traverse children if they exist
+        if ('children' in node) {
+            for (const child of node.children) {
+                traverseNode(child);
+            }
+        }
+    }
+
+    if (selection.length === 0) {
+        // If nothing is selected, search the entire page
+        for (const node of figma.currentPage.children) {
+            traverseNode(node);
+        }
+    } else {
+        // Search within selected nodes
+        for (const node of selection) {
+            traverseNode(node);
+        }
+    }
+
+    return components;
+}
+
+// Image export functionality
+function findImageNodes() {
+    const selection = figma.currentPage.selection;
+    const imageNodes = [];
+
+    function traverseNode(node) {
+        // Check if this node is named "Hero Banner" or "Image"
+        if (node.name === 'Hero Banner' || node.name === 'Image') {
+            // Add any node with these names - we can export any visual node
+            imageNodes.push(node);
+        }
+        
+        // Traverse children if they exist
+        if ('children' in node) {
+            for (const child of node.children) {
+                traverseNode(child);
+            }
+        }
+    }
+
+    if (selection.length === 0) {
+        // If nothing is selected, search the entire page
+        for (const node of figma.currentPage.children) {
+            traverseNode(node);
+        }
+    } else {
+        // Search within selected nodes
+        for (const node of selection) {
+            traverseNode(node);
+        }
+    }
+
+    return imageNodes;
+}
+
+async function exportImages() {
+    const imageNodes = findImageNodes();
+    
+    if (imageNodes.length === 0) {
+        return { success: true, count: 0 };
+    }
+
+    const exportedImages = [];
+
+    for (const node of imageNodes) {
+        try {
+            // Calculate appropriate scale to keep file size reasonable
+            let scale = 1;
+            const nodeArea = node.width * node.height;
+            
+            // Reduce scale for very large nodes to keep file size under control
+            if (nodeArea > 1000000) { // 1M pixels
+                scale = 0.5;
+            } else if (nodeArea > 500000) { // 500K pixels
+                scale = 0.7;
+            }
+
+            // Export the node as PNG
+            const imageData = await node.exportAsync({
+                format: 'PNG',
+                constraint: { type: 'SCALE', value: scale }
+            });
+
+            // If still too large, try JPG format which is more compressed
+            let finalImageData = imageData;
+            let format = 'png';
+            
+            if (imageData.byteLength > 500 * 1024) {
+                finalImageData = await node.exportAsync({
+                    format: 'JPG',
+                    constraint: { type: 'SCALE', value: scale }
+                });
+                format = 'jpg';
+            }
+
+            // If still too large, reduce scale further
+            if (finalImageData.byteLength > 500 * 1024 && scale > 0.3) {
+                finalImageData = await node.exportAsync({
+                    format: 'JPG',
+                    constraint: { type: 'SCALE', value: 0.3 }
+                });
+            }
+
+            // Send image data to UI for download
+            figma.ui.postMessage({
+                type: 'download-image',
+                imageData: Array.from(finalImageData),
+                filename: `${node.name.replace(/\s+/g, '_')}_${Date.now()}.${format}`
+            });
+
+            exportedImages.push(node.name);
+        } catch (error) {
+            console.error(`Failed to export ${node.name}:`, error);
+        }
+    }
+
+    return { success: true, count: exportedImages.length };
+}
+
+figma.ui.onmessage = async (msg) => {
+    if (msg.type === 'generate-code') {
+        try {
+            const components = findComponentsInSelection();
+            
+            if (components.length === 0) {
+                figma.ui.postMessage({
+                    type: 'code-generated',
+                    code: '',
+                    error: 'No recognized components found. Make sure your components are named: "Text Block", "Attention Text Block", "CTA Text Block", "Primary Button", or "Secondary Button".'
+                });
+                return;
+            }
+
+            // Combine header, components, and footer
+            const fullCode = HEADER + '\n' + components.join('\n') + '\n' + FOOTER;
+
+            figma.ui.postMessage({
+                type: 'code-generated',
+                code: fullCode,
+                error: null
+            });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            figma.ui.postMessage({
+                type: 'code-generated',
+                code: '',
+                error: `Error generating code: ${errorMessage}`
+            });
+        }
+    }
+
+    if (msg.type === 'export-images') {
+        try {
+            const result = await exportImages();
+            
+            figma.ui.postMessage({
+                type: 'images-exported',
+                imageCount: result.count,
+                error: result.success ? null : 'Failed to export images'
+            });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            figma.ui.postMessage({
+                type: 'images-exported',
+                imageCount: 0,
+                error: `Error exporting images: ${errorMessage}`
+            });
+        }
+    }
+
+    if (msg.type === 'close-plugin') {
+        figma.closePlugin();
+    }
+};
