@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: "Manrope", sans-serif;
+      background: #f8f9fa;
+      padding: 16px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+    
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    
+    .header p {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+    
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    
+    .generate-section {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      border: 1px solid #e9ecef;
+    }
+    
+    .info-box {
+      background: #e3f2fd;
+      border: 1px solid #bbdefb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      color: #1565c0;
+    }
+    
+    .info-box strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+    
+    .component-list {
+      font-size: 11px;
+      line-height: 1.4;
+      margin-left: 8px;
+    }
+    
+    .button-group {
+      display: flex;
+      gap: 12px;
+      flex-direction: column;
+    }
+    
+    .generate-btn {
+      background: #E25544;
+      color: white;
+      border: none;
+      width: 100%;
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 400;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .export-btn {
+      background: #28a745;
+      color: white;
+      border: none;
+      width: 100%;
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 400;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .generate-btn:hover, .export-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .generate-btn:active, .export-btn:active {
+      transform: translateY(0);
+    }
+    
+    .generate-btn:disabled, .export-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .code-section {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      border: 1px solid #e9ecef;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .code-section h3 {
+      font-size: 14px;
+      margin-bottom: 12px;
+      color: #495057;
+      font-weight: 600;
+    }
+    
+    .code-output {
+      flex: 1;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-all;
+      resize: none;
+      min-height: 120px;
+      color: #495057;
+    }
+    
+    .code-output:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .error-message {
+      background: #ffebee;
+      color: #c62828;
+      border: 1px solid #ffcdd2;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    
+    .success-message {
+      background: #e8f5e8;
+      color: #2e7d32;
+      border: 1px solid #c8e6c9;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    
+    .info-message {
+      background: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeaa7;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    
+    .copy-btn {
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background-color 0.2s ease;
+    }
+    
+    .copy-btn:hover {
+      background: #218838;
+    }
+    
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #ffffff40;
+      border-top: 2px solid #ffffff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  
+  <div class="main-content">
+    <div class="generate-section">
+      <div class="info-box">
+        <strong>Supported Components:</strong>
+        <div class="component-list">
+          • Text Block (with "Headline" + "Body Text")<br>
+          • Attention Text Block (with "Headline" + "Body Text")<br>
+          • CTA Text Block (with "Headline" + "Body Text")<br>
+          • Primary Button (with "Label")<br>
+          • Secondary Button (with "Label")<br>
+          • Images (named "Hero Banner" or "Image")
+        </div>
+      </div>
+      
+      <div class="button-group">
+        <button id="generateBtn" class="generate-btn">
+          Generate Code
+        </button>
+        
+        <button id="exportBtn" class="export-btn">
+          📸 Export Images
+        </button>
+      </div>
+    </div>
+    
+    <div class="code-section">
+      <h3>Generated Code:</h3>
+      <div id="messages"></div>
+      <textarea id="codeOutput" class="code-output" placeholder="Click 'Generate Code' to create code..." readonly></textarea>
+      <button id="copyBtn" class="copy-btn" style="display: none;">📋 Copy Code</button>
+    </div>
+  </div>
+
+  <script>
+    const generateBtn = document.getElementById('generateBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const codeOutput = document.getElementById('codeOutput');
+    const copyBtn = document.getElementById('copyBtn');
+    const messages = document.getElementById('messages');
+    
+    function showMessage(message, type = 'error') {
+      messages.innerHTML = `<div class="${type}-message">${message}</div>`;
+      setTimeout(() => {
+        messages.innerHTML = '';
+      }, 5000);
+    }
+    
+    generateBtn.addEventListener('click', () => {
+      generateBtn.disabled = true;
+      generateBtn.innerHTML = '<span class="loading"></span>Generating...';
+      codeOutput.value = '';
+      copyBtn.style.display = 'none';
+      messages.innerHTML = '';
+      
+      parent.postMessage({ pluginMessage: { type: 'generate-code' } }, '*');
+    });
+    
+    exportBtn.addEventListener('click', () => {
+      exportBtn.disabled = true;
+      exportBtn.innerHTML = '<span class="loading"></span>Exporting...';
+      messages.innerHTML = '';
+      
+      parent.postMessage({ pluginMessage: { type: 'export-images' } }, '*');
+    });
+    
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(codeOutput.value);
+        copyBtn.textContent = '✅ Copied!';
+        setTimeout(() => {
+          copyBtn.textContent = '📋 Copy Code';
+        }, 2000);
+      } catch (err) {
+        // Fallback for older browsers
+        codeOutput.select();
+        document.execCommand('copy');
+        copyBtn.textContent = '✅ Copied!';
+        setTimeout(() => {
+          copyBtn.textContent = '📋 Copy Code';
+        }, 2000);
+      }
+    });
+    
+    window.addEventListener('message', (event) => {
+      const { type, code, error, imageCount, imageData, filename } = event.data.pluginMessage;
+      
+      if (type === 'code-generated') {
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = 'Generate Code';
+        
+        if (error) {
+          showMessage(error, 'error');
+          codeOutput.value = '';
+          copyBtn.style.display = 'none';
+        } else {
+          codeOutput.value = code;
+          copyBtn.style.display = 'block';
+          if (code.trim()) {
+            showMessage('Code generated successfully! 🎉', 'success');
+          }
+        }
+      }
+      
+      if (type === 'download-image') {
+        // Handle individual image download
+        const uint8Array = new Uint8Array(imageData);
+        const blob = new Blob([uint8Array], { type: 'image/png' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+      
+      if (type === 'images-exported') {
+        exportBtn.disabled = false;
+        exportBtn.innerHTML = '📸 Export Images';
+        
+        if (error) {
+          showMessage(error, 'error');
+        } else {
+          const message = imageCount > 0 
+            ? `Successfully exported ${imageCount} image(s)! 🎉`
+            : 'No images named "Hero Banner" or "Image" found to export.';
+          const messageType = imageCount > 0 ? 'success' : 'info';
+          showMessage(message, messageType);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
