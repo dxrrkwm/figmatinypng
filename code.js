@@ -139,55 +139,60 @@ async function exportImages() {
     const exportedImages = [];
 
     for (const node of imageNodes) {
-        try {
-            // Calculate appropriate scale to keep file size reasonable
-            let scale = 1;
-            const nodeArea = node.width * node.height;
-            
-            // Reduce scale for very large nodes to keep file size under control
-            if (nodeArea > 1000000) { // 1M pixels
-                scale = 0.5;
-            } else if (nodeArea > 500000) { // 500K pixels
-                scale = 0.7;
-            }
+      try {
+          // Calculate appropriate scale to balance quality and file size
+          let scale = 2; // Start with 2x for better quality
+          const nodeArea = node.width * node.height;
+          
+          // Adjust scale based on node size to maintain quality while controlling file size
+          if (nodeArea > 2000000) { // 2M pixels - very large
+              scale = 1;
+          } else if (nodeArea > 1000000) { // 1M pixels - large
+              scale = 1.5;
+          } else if (nodeArea > 500000) { // 500K pixels - medium
+              scale = 2;
+          } else {
+              scale = 2.5; // Small nodes can handle higher quality
+          }
 
-            // Export the node as PNG
-            const imageData = await node.exportAsync({
-                format: 'PNG',
-                constraint: { type: 'SCALE', value: scale }
-            });
+          // First try PNG with higher quality
+          const imageData = await node.exportAsync({
+              format: 'PNG',
+              constraint: { type: 'SCALE', value: scale }
+          });
 
-            // If still too large, try JPG format which is more compressed
-            let finalImageData = imageData;
-            let format = 'png';
-            
-            if (imageData.byteLength > 500 * 1024) {
-                finalImageData = await node.exportAsync({
-                    format: 'JPG',
-                    constraint: { type: 'SCALE', value: scale }
-                });
-                format = 'jpg';
-            }
+          let finalImageData = imageData;
+          let format = 'png';
+          
+          // If PNG is too large (over 1MB), try JPG with same scale but higher quality
+          if (imageData.byteLength > 1024 * 1024) {
+              finalImageData = await node.exportAsync({
+                  format: 'JPG',
+                  constraint: { type: 'SCALE', value: scale },
+                  // No quality setting means maximum quality for JPG
+              });
+              format = 'jpg';
+          }
 
-            // If still too large, reduce scale further
-            if (finalImageData.byteLength > 500 * 1024 && scale > 0.3) {
-                finalImageData = await node.exportAsync({
-                    format: 'JPG',
-                    constraint: { type: 'SCALE', value: 0.3 }
-                });
-            }
+          // Only reduce scale if still over 1.5MB
+          if (finalImageData.byteLength > 1536 * 1024 && scale > 1) {
+              finalImageData = await node.exportAsync({
+                  format: 'JPG',
+                  constraint: { type: 'SCALE', value: Math.max(1, scale * 0.7) }
+              });
+          }
 
-            // Store image data instead of sending immediately
-            exportedImages.push({
-                name: node.name,
-                imageData: Array.from(finalImageData),
-                filename: `${node.name.replace(/\s+/g, '_')}_${Date.now() + exportedImages.length}.${format}`
-            });
+          // Store image data instead of sending immediately
+          exportedImages.push({
+              name: node.name,
+              imageData: Array.from(finalImageData),
+              filename: `${node.name.replace(/\s+/g, '_')}_${Date.now() + exportedImages.length}.${format}`
+          });
 
-        } catch (error) {
-            console.error(`Failed to export ${node.name}:`, error);
-        }
-    }
+      } catch (error) {
+          console.error(`Failed to export ${node.name}:`, error);
+      }
+  }
 
     // Send all images at once to the UI
     figma.ui.postMessage({
